@@ -1,3 +1,8 @@
+
+https://stackoverflow.com/questions/5345803/does-gdi-have-standard-image-encoder-clsids
+https://docs.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-cropping-and-scaling-images-about
+
+
 ===============================================================================================================
    SAMPLE : ErrorHandler
 ================================================================================================================

@@ -331,3 +331,19 @@ HRESULT PrintItemName( IWiaItem2 *pIWiaItem2 )
     return hr;
 }
 
+void debug_output(HRESULT hr)
+{
+	std::wstringstream ss;
+	ss << "hr =" << (int)hr << _com_error(hr).ErrorMessage() << std::endl;;
+	OutputDebugString(ss.str().c_str());
+}
+
+void sleepForSeconds(int second)
+{
+	while (second > 0)
+	{
+		Sleep(1000);
+		std::cout << "\r" << second << " seconds to scan new page" << std::endl;
+		second--;
+	}
+}

@@ -15,6 +15,18 @@
 //-------------------------------------------------------------
 
 #include "ErrorHandler.h"
+#include <Gdiplus.h>
+#include <windows.h>
+#include <vector>
+
+
+#pragma comment(lib, "Gdiplus.lib") 
+
+using namespace Gdiplus;
+
+static int pageIndex = 1; // current index of the page
+static char command = 'a';
+
 
 // This function downloads item after setting the format for the item and initializing callback (depending on category,itemtype)
 // with the directory to download images to as well as the filename for the downloaded image.
@@ -45,7 +57,7 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2)
                 HRESULT hr = pWiaItem2->QueryInterface( IID_IWiaPropertyStorage, (void**)&pWiaPropertyStorage );
                 if(SUCCEEDED(hr))
                 {
-                    hr = WritePropertyGuid(pWiaPropertyStorage,WIA_IPA_FORMAT,WiaImgFmt_BMP);
+                    hr = WritePropertyGuid(pWiaPropertyStorage,WIA_IPA_FORMAT,WiaImgFmt_JPEG);
                     if(FAILED(hr))
                     {
                         ReportError(TEXT("WritePropertyGuid() failed in DownloadItem().Format couldn't be set to BMP"),hr);
@@ -58,8 +70,8 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2)
                     ReadPropertyBSTR(pWiaPropertyStorage,WIA_IPA_FILENAME_EXTENSION, &bstrFileExtension);
             
                     //Get the temporary folder path which is the directory where we will download the images
-                    TCHAR bufferTempPath[MAX_TEMP_PATH];
-                    GetTempPath(MAX_TEMP_PATH , bufferTempPath);
+                    TCHAR bufferTempPath[MAX_TEMP_PATH]  = TEXT("C:\\Users\\nastik\\Pictures\\Зіскановане\\new");
+                    //GetTempPath(MAX_TEMP_PATH , bufferTempPath);
             
                     // Find out item type
                     GUID itemCategory = GUID_NULL;
@@ -143,6 +155,7 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2)
         m_bFeederTransfer  = FALSE;
         m_bstrFileExtension = NULL;
         m_bstrDirectoryName = NULL;
+		m_ItemName = NULL;
         memset(m_szFileName,0,sizeof(m_szFileName));
     }
     
@@ -159,6 +172,12 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2)
             SysFreeString(m_bstrFileExtension);
             m_bstrFileExtension = NULL;
         }
+
+		if (m_ItemName)
+		{
+			SysFreeString(m_ItemName);
+			m_ItemName = NULL;
+		}
 
     }
 
@@ -260,7 +279,7 @@ HRESULT STDMETHODCALLTYPE CWiaTransferCallback::TransferCallback(LONG lFlags, Wi
     {
         case WIA_TRANSFER_MSG_STATUS:
             {
-                _tprintf(TEXT("\nWIA_TRANSFER_MSG_STATUS - %ld%% complete"),pWiaTransferParams->lPercentComplete);
+                _tprintf(TEXT("\rWIA_TRANSFER_MSG_STATUS - %ld%% complete"),pWiaTransferParams->lPercentComplete);
             }
             break;
         case WIA_TRANSFER_MSG_END_OF_STREAM:
@@ -272,6 +291,8 @@ HRESULT STDMETHODCALLTYPE CWiaTransferCallback::TransferCallback(LONG lFlags, Wi
             {
                 _tprintf(TEXT("\nWIA_TRANSFER_MSG_END_OF_TRANSFER"));
                 _tprintf(TEXT("\nImage Transferred to file %ws"), m_szFileName);
+				RotateAndCropJpeg(m_bstrDirectoryName, m_szFileName);
+				pageIndex++;
             }
             break;
         case WIA_TRANSFER_MSG_DEVICE_STATUS:
@@ -284,6 +305,8 @@ HRESULT STDMETHODCALLTYPE CWiaTransferCallback::TransferCallback(LONG lFlags, Wi
     }
     return hr;
 }
+
+
 
 // This function is called by WIA service to get data stream from the application.
 HRESULT STDMETHODCALLTYPE CWiaTransferCallback::GetNextStream(LONG lFlags, BSTR bstrItemName, BSTR bstrFullItemName, IStream **ppDestination)
@@ -300,8 +323,25 @@ HRESULT STDMETHODCALLTYPE CWiaTransferCallback::GetNextStream(LONG lFlags, BSTR 
     //Initialize out variables
     *ppDestination = NULL;
     
+
     if(m_bstrFileExtension)
     {
+		if (bstrItemName)
+		{
+			m_ItemName = SysAllocString(bstrItemName);
+			if (!m_ItemName)
+			{
+				hr = E_OUTOFMEMORY;
+				ReportError(TEXT("\nFailed to allocate memory for BSTR item name"), hr);
+				return hr;
+			}
+		}
+		else
+		{
+			_tprintf(TEXT("\nNo item name was given"));
+			return E_INVALIDARG;
+		}
+
         //For feeder transfer, append the page count to the filename
         if (m_bFeederTransfer)
         {
@@ -309,7 +349,7 @@ HRESULT STDMETHODCALLTYPE CWiaTransferCallback::GetNextStream(LONG lFlags, BSTR 
         }
         else
         {
-            StringCchPrintf(m_szFileName, ARRAYSIZE(m_szFileName), TEXT("%ws\\%ws.%ws"), m_bstrDirectoryName, bstrItemName, m_bstrFileExtension);
+            StringCchPrintf(m_szFileName, ARRAYSIZE(m_szFileName), TEXT("%ws\\%ws_%02d.%ws"), m_bstrDirectoryName, bstrItemName, pageIndex, m_bstrFileExtension);
         }
     }
     
@@ -447,7 +487,70 @@ HRESULT EnumerateAndDownloadItems( IWiaItem2 *pWiaItem2 )
     // We have deliberately left finished files for simplicity
     if ( (lItemType & WiaItemTypeFile) && (lItemType & WiaItemTypeTransfer) && (itemCategory != WIA_CATEGORY_FINISHED_FILE) )
     {
-        hr = DownloadItem( pWiaItem2 );
+		
+		bool fistIteration = true;
+		int timeoutValue = 6;
+		std::cout << "press 'a' for auto scanning mode, 'n' for scan next page, 'e' if there is no more pages to scan, "
+			"'r' - reset the counter to some number,  " 
+			<< std::endl;
+		while (1)
+		{
+			switch (command)
+			{
+			case 'a':
+			{
+				if (!fistIteration)
+				{
+					sleepForSeconds(timeoutValue);
+					if (command == 's')
+						break;
+				}
+			}
+			case 'n':
+			{
+				std::cout << "Scanning " << pageIndex << "-th page of the book" << std::endl;
+				hr = DownloadItem(pWiaItem2);
+				std::cout << std::endl;
+				fistIteration = false;
+				break;
+			}
+			case 'e':
+			{
+				std::cout << "no more pages to scan\n";
+				break;
+			}
+			case 'r':
+			{
+				int resetPageIndex = 1;
+				std::cout << "What is the new NUMBER OF THE NEXT PAGE to continue?" << std::endl;
+				std::cin >> resetPageIndex;
+				pageIndex = resetPageIndex;
+				std::cout << "page counter reset to " << pageIndex << std::endl;
+				break;
+			}
+			case 't':
+			{
+				std::cout << "What is the new TIMEOUT value for autoscan?" << std::endl;
+				std::cin >> timeoutValue;				
+				break;
+			}
+			case 's': // stop auto or do nothing
+				// pass
+				break;
+			default: // wrong input
+				std::cout << "try again\n";
+				break;
+			}
+			
+			if (command == 'e')
+				break;
+
+			if (command != 'a')
+			{
+				command = 0;
+				std::cin >> command;
+			}			
+		}        
     }
 
     // If it is a folder, enumerate its children
@@ -608,10 +711,26 @@ HRESULT EnumerateWiaDevices( IWiaDevMgr2 *pWiaDevMgr2 )
 }
 
 
+bool consoleHandler(int signal) {
+
+	if (signal == CTRL_BREAK_EVENT) {
+		std::cout << "\nCtrl Break Event invoked - canceling auto" << std::endl;
+		command = 's';
+	}
+	return true;
+}
+
 // The entry function of the application
 extern "C" 
 int __cdecl _tmain( int, TCHAR *[] )
 {
+
+	//RotateJpeg();
+	//return 0;
+
+	SetConsoleCtrlHandler((PHANDLER_ROUTINE)consoleHandler, TRUE);
+
+
     // Initialize COM
     HRESULT hr = CoInitialize(NULL);
     if (SUCCEEDED(hr))
@@ -643,4 +762,69 @@ int __cdecl _tmain( int, TCHAR *[] )
     return 0;
 }
 
+
+
+
+
+void CWiaTransferCallback::RotateAndCropJpeg(BSTR m_bstrDirectoryName, TCHAR* m_szFileName)
+{
+	GdiplusStartupInput gdiplusStartupInput;
+	ULONG_PTR gdiplusToken;
+	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+	TCHAR originalFile[MAX_FILENAME_LENGTH];
+	StringCchPrintf(originalFile, ARRAYSIZE(originalFile), TEXT("%ws\\%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+
+	std::wstring s1 = originalFile;
+	std::wstring s2 = m_szFileName;
+	
+	assert(s1.compare(s2) == 0);
+
+	Gdiplus::Image image(originalFile);
+	image.RotateFlip(Rotate90FlipNone);
+
+	const CLSID pngEncoderClsId = { 0x557cf406, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
+	const CLSID jpegEncoderClsId = { 0x557cf401, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
+
+	TCHAR rotatedFile[MAX_FILENAME_LENGTH];
+	StringCchPrintf(rotatedFile, ARRAYSIZE(rotatedFile), TEXT("%ws\\R_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+
+	Gdiplus::Status stat = image.Save(rotatedFile, &jpegEncoderClsId, NULL);
+
+	// Cropping image
+	TCHAR croppedFile[MAX_FILENAME_LENGTH];
+	StringCchPrintf(croppedFile, ARRAYSIZE(croppedFile), TEXT("%ws\\C_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+
+	//2338*1700
+	// 356, 1592
+
+	const int uncroppedWidth = 2338;
+	const int uncroppedHeight = 1700;
+
+	// position of the left bottom crop point
+	const int X = 356;
+	const int Y = 1592;
+
+	const int croppedWidth = uncroppedWidth - X;
+	const int croppedHeight = Y;
+
+	// load image
+	//Gdiplus::Image* pGdiImage = new Gdiplus::Image(rotatedFile);
+
+	//// converting to bitmap
+
+	// old bitmap
+	Gdiplus::Bitmap* rotatedBitmap = Gdiplus::Bitmap::FromFile(rotatedFile);
+	Gdiplus::RectF bmpRect(0.0f, 0.0f, croppedWidth, croppedHeight);
+
+	// new bitmap 
+	Gdiplus::Bitmap* croppedBitmap = rotatedBitmap->Clone(X, 0, croppedWidth, croppedHeight, rotatedBitmap->GetPixelFormat());
+
+	stat = croppedBitmap->Save(croppedFile, &jpegEncoderClsId, NULL);
+
+	//pGdiBitmap->GetHBITMAP(Gdiplus::Color(0, 0, 0), &pImage->m_hBitmap);
+	//Bitmap myBitmap(rotatedFile);
+	//Gdiplus::Rect sourceRectangle(356, 0, 1700-356, 1592);
+
+}
 

@@ -16,7 +16,9 @@
 //-------------------------------------------------------------
 #define __WIA_ERRORHANDLER_SAMPLE
 
+
 #include "utils.h"
+
 
 #define MAX_TEMP_PATH 1024
 #define MAX_FILENAME_LENGTH 1024
@@ -30,6 +32,7 @@ private:
     BSTR  m_bstrFileExtension;       //file extension to be appended to the download file 
     BOOL  m_bFeederTransfer;         //flag indicating whether download is from feeder item
     BSTR  m_bstrDirectoryName;       //download directory 
+	BSTR  m_ItemName;				 // item name
     TCHAR m_szFileName[MAX_FILENAME_LENGTH];         //download file
 
 public:
@@ -54,7 +57,8 @@ public:
     // IWiaAppErrorHandler functions
     HRESULT STDMETHODCALLTYPE ReportStatus(LONG lFlags,IWiaItem2* pWiaItem2,HRESULT hrStatus,LONG lPercentComplete);
     HRESULT STDMETHODCALLTYPE GetWindow( HWND *phwnd );
-
+	
+	void RotateAndCropJpeg(BSTR m_bstrDirectoryName, TCHAR* m_szFileName);
 };
 
 
@@ -63,6 +67,9 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2);
 HRESULT EnumerateAndDownloadItems( IWiaItem2 *pIWiaItem2 );
 
 HRESULT EnumerateWiaDevices( IWiaDevMgr2 *pWiaDevMgr2 );
+
+bool consoleHandler(int signal);
+
 
 #endif
 

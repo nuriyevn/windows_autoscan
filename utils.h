@@ -24,6 +24,12 @@
 #include <oleauto.h>
 #include <shlwapi.h>
 #include <strsafe.h>
+#include <sstream>
+#include <comdef.h>
+#include <iostream>
+
+#pragma comment(lib,"Ole32.lib")  // linker issues
+
 
 
 // Helper function to display an error message and an optional HRESULT
@@ -42,5 +48,9 @@ HRESULT WritePropertyLong(IWiaPropertyStorage* pWiaPropertyStorage, PROPID propi
 HRESULT ReadWiaPropsAndGetDeviceID( IWiaPropertyStorage *pWiaPropertyStorage ,BSTR* pbstrDeviceID );
 
 HRESULT PrintItemName( IWiaItem2 *pIWiaItem2 );
+
+void debug_output(HRESULT hr);
+
+void sleepForSeconds(int second);
 
 #endif
