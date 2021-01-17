@@ -2,7 +2,7 @@ AUTOSCAN program.
 
 Preconditions:
 1. Captain Obviousness wants to warn you that in order to use this program you should have scanner to work with this program :)
-2. This program was tested with Windows 10
+2. This program was tested with Windows 10 Pro x64 1903
 
 
 The overall architecture: the scanning program uses WIA - Window Image Acquisition library using COM objects alongside with GDI+.
