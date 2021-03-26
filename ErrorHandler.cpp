@@ -490,8 +490,8 @@ HRESULT EnumerateAndDownloadItems( IWiaItem2 *pWiaItem2 )
 		
 		bool fistIteration = true;
 		int timeoutValue = 6;
-		std::cout << "press 'a' for auto scanning mode, 'n' for scan next page, 'e' if there is no more pages to scan, "
-			"'r' - reset the counter to some number,  " 
+		std::cout << "press 'a' for auto scanning mode, 'n' for scan next page, 'e' if there is no more pages to scan so break and exit, "
+			"'r' - reset the counter to some number,  CTRL+BREAK -  to terminate when the page will be scanned" 
 			<< std::endl;
 		while (1)
 		{
