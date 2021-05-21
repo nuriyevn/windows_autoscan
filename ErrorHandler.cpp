@@ -25,7 +25,9 @@
 using namespace Gdiplus;
 
 static int pageIndex = 1; // current index of the page
-static char command = 'a';
+static char command = 's';
+static float crop_margin_left = 22; // in percent
+static float crop_margin_bottom = 7.2; // in percent
 
 
 // This function downloads item after setting the format for the item and initializing callback (depending on category,itemtype)
@@ -91,9 +93,10 @@ HRESULT DownloadItem(IWiaItem2* pWiaItem2)
 
                     //Initialize the callback class with the directory, file extension and feeder flag
                     pWiaClassCallback->InitializeCallback(bufferTempPath,bstrFileExtension,bFeederTransfer);
-                    
                     //Now download file item
                     hr = pWiaTransfer->Download(0,pWiaTransferCallback);
+
+
                     if(S_OK == hr)
                     {
                         _tprintf(TEXT("\npWiaTransfer->Download() on file item SUCCEEDED"));
@@ -491,7 +494,7 @@ HRESULT EnumerateAndDownloadItems( IWiaItem2 *pWiaItem2 )
 		bool fistIteration = true;
 		int timeoutValue = 6;
 		std::cout << "press 'a' for auto scanning mode, 'n' for scan next page, 'e' if there is no more pages to scan so break and exit, "
-			"'r' - reset the counter to some number,  CTRL+BREAK -  to terminate when the page will be scanned" 
+			"'r' - reset the counter to some number, 'm' to set left and bottom margin, CTRL+BREAK -  to terminate when the page will be scanned" 
 			<< std::endl;
 		while (1)
 		{
@@ -509,6 +512,7 @@ HRESULT EnumerateAndDownloadItems( IWiaItem2 *pWiaItem2 )
 			case 'n':
 			{
 				std::cout << "Scanning " << pageIndex << "-th page of the book" << std::endl;
+
 				hr = DownloadItem(pWiaItem2);
 				std::cout << std::endl;
 				fistIteration = false;
@@ -536,6 +540,15 @@ HRESULT EnumerateAndDownloadItems( IWiaItem2 *pWiaItem2 )
 			}
 			case 's': // stop auto or do nothing
 				// pass
+				break;
+			case 'm':
+				std::cout << "Left margin is " << crop_margin_left << "%\n";
+				std::cout << "Bottom margin is " << crop_margin_bottom << "%\n";
+				std::cout << "New left margin (XX.XX):\n";
+				std::cin >> crop_margin_left;
+				std::cout << "New bottom margin (XX.XX):\n";
+				std::cin >> crop_margin_bottom;
+				std::cout << "Left and Bottom margins has been set to " << crop_margin_left << " and " << crop_margin_bottom << std::endl;
 				break;
 			default: // wrong input
 				std::cout << "try again\n";
@@ -651,6 +664,8 @@ HRESULT EnumerateWiaDevices( IWiaDevMgr2 *pWiaDevMgr2 )
                         hr1 = pWiaDevMgr2->CreateDevice( 0, bstrDeviceID, &pWiaRootItem2 );
                         if(SUCCEEDED(hr1))
                         {
+
+
                             // Enumerate items and for each item do transfer
                             hr1 = EnumerateAndDownloadItems( pWiaRootItem2 );
                             if(FAILED(hr1))
@@ -710,7 +725,6 @@ HRESULT EnumerateWiaDevices( IWiaDevMgr2 *pWiaDevMgr2 )
     return hr;
 }
 
-
 bool consoleHandler(int signal) {
 
 	if (signal == CTRL_BREAK_EVENT) {
@@ -762,9 +776,19 @@ int __cdecl _tmain( int, TCHAR *[] )
     return 0;
 }
 
+const CLSID pngEncoderClsId = { 0x557cf406, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
+const CLSID jpegEncoderClsId = { 0x557cf401, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
 
+Gdiplus::Image* RotateImage(TCHAR originalFile[MAX_FILENAME_LENGTH], int degree = 90)
+{
+	Gdiplus::Image* image = new Gdiplus::Image(originalFile);
+	if (degree == 90)
+		image->RotateFlip(Rotate90FlipNone);
+	else if (degree == 270)
+		image->RotateFlip(Rotate270FlipNone);
 
-
+	return image;
+}
 
 void CWiaTransferCallback::RotateAndCropJpeg(BSTR m_bstrDirectoryName, TCHAR* m_szFileName)
 {
@@ -777,54 +801,74 @@ void CWiaTransferCallback::RotateAndCropJpeg(BSTR m_bstrDirectoryName, TCHAR* m_
 
 	std::wstring s1 = originalFile;
 	std::wstring s2 = m_szFileName;
-	
 	assert(s1.compare(s2) == 0);
 
-	Gdiplus::Image image(originalFile);
-	image.RotateFlip(Rotate90FlipNone);
+	// Rotating image
+	Gdiplus::Image *image90 = RotateImage(originalFile, 90);
+	Gdiplus::Image *image270 = RotateImage(originalFile, 270);
 
-	const CLSID pngEncoderClsId = { 0x557cf406, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
-	const CLSID jpegEncoderClsId = { 0x557cf401, 0x1a04, 0x11d3,{ 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e } };
+	TCHAR rotatedFile90[MAX_FILENAME_LENGTH];
+	StringCchPrintf(rotatedFile90, ARRAYSIZE(rotatedFile90), TEXT("%ws\\R90_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+	Gdiplus::Status stat = image90->Save(rotatedFile90, &jpegEncoderClsId, NULL);
 
-	TCHAR rotatedFile[MAX_FILENAME_LENGTH];
-	StringCchPrintf(rotatedFile, ARRAYSIZE(rotatedFile), TEXT("%ws\\R_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+	TCHAR rotatedFile270[MAX_FILENAME_LENGTH];
+	StringCchPrintf(rotatedFile270, ARRAYSIZE(rotatedFile90), TEXT("%ws\\R270_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+    stat = image270->Save(rotatedFile270, &jpegEncoderClsId, NULL);
+	
 
-	Gdiplus::Status stat = image.Save(rotatedFile, &jpegEncoderClsId, NULL);
+
+	TCHAR croppedFile90[MAX_FILENAME_LENGTH];
+	StringCchPrintf(croppedFile90, ARRAYSIZE(croppedFile90), TEXT("%ws\\C90_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+
+	TCHAR croppedFile270[MAX_FILENAME_LENGTH];
+	StringCchPrintf(croppedFile270, ARRAYSIZE(croppedFile270), TEXT("%ws\\C270_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
+	
+	// crop 90
+	Gdiplus::Bitmap* rotatedBitmap90 = Gdiplus::Bitmap::FromFile(rotatedFile90);
+
+	UINT width = rotatedBitmap90->GetWidth();
+	UINT height = rotatedBitmap90->GetHeight();
 
 	// Cropping image
-	TCHAR croppedFile[MAX_FILENAME_LENGTH];
-	StringCchPrintf(croppedFile, ARRAYSIZE(croppedFile), TEXT("%ws\\C_%ws_%02d.%ws"), m_bstrDirectoryName, m_ItemName, pageIndex, m_bstrFileExtension);
-
-	//2338*1700
+	// 2338*1700
 	// 356, 1592
-
-	const int uncroppedWidth = 2338;
-	const int uncroppedHeight = 1700;
-
+	//const int uncroppedWidth = 2338;
+	//const int uncroppedHeight = 1700;
 	// position of the left bottom crop point
-	const int X = 356;
-	const int Y = 1592;
+	//const int X = 400; // 356
+	//const int Y = 1592;
+	//const int croppedWidth = uncroppedWidth - X;
+	//const int croppedHeight = Y;
+	
+	const float x_percent = crop_margin_left / 100.0;
+	const float y_percent = 1 - (crop_margin_bottom / 100.0);
 
-	const int croppedWidth = uncroppedWidth - X;
-	const int croppedHeight = Y;
+	const int x_offset = x_percent * width;
+	const int croppedWidth = width - x_offset;
+	const int croppedHeight = y_percent* height;
 
-	// load image
-	//Gdiplus::Image* pGdiImage = new Gdiplus::Image(rotatedFile);
+	Gdiplus::Bitmap* croppedBitmap90 = rotatedBitmap90->Clone(x_offset, 0, croppedWidth, croppedHeight, rotatedBitmap90->GetPixelFormat());
+	DWORD lastError = GetLastError();
+	if (lastError != 0)	std::cout << "GetLastError after rotatedBitmap90->Clone  = " << lastError << std::endl;
 
-	//// converting to bitmap
+	stat = croppedBitmap90->Save(croppedFile90, &jpegEncoderClsId, NULL);
+	lastError = GetLastError();
+	if (lastError != 0)	std::cout << "GetLastError after croppedBitmap90->Save  = " << lastError << std::endl;
 
-	// old bitmap
-	Gdiplus::Bitmap* rotatedBitmap = Gdiplus::Bitmap::FromFile(rotatedFile);
-	Gdiplus::RectF bmpRect(0.0f, 0.0f, croppedWidth, croppedHeight);
-
-	// new bitmap 
-	Gdiplus::Bitmap* croppedBitmap = rotatedBitmap->Clone(X, 0, croppedWidth, croppedHeight, rotatedBitmap->GetPixelFormat());
-
-	stat = croppedBitmap->Save(croppedFile, &jpegEncoderClsId, NULL);
-
-	//pGdiBitmap->GetHBITMAP(Gdiplus::Color(0, 0, 0), &pImage->m_hBitmap);
-	//Bitmap myBitmap(rotatedFile);
-	//Gdiplus::Rect sourceRectangle(356, 0, 1700-356, 1592);
-
+	// crop 270
+	Gdiplus::Bitmap* rotatedBitmap270 = Gdiplus::Bitmap::FromFile(rotatedFile270);
+	Gdiplus::Bitmap* croppedBitmap270 = rotatedBitmap270->Clone(x_offset, 0, croppedWidth, croppedHeight, rotatedBitmap270->GetPixelFormat());
+	lastError = GetLastError();
+	if (lastError != 0)	std::cout << "GetLastError after rotatedBitmap270->Clone  = " << lastError << std::endl;
+	stat = croppedBitmap270->Save(croppedFile270, &jpegEncoderClsId, NULL);
+	lastError = GetLastError();
+	if (lastError != 0)	std::cout << "GetLastError after croppedBitmap270->Save  = " << lastError << std::endl;
+	
+	DeleteObject(image90);
+	DeleteObject(image270);
+	DeleteObject(rotatedBitmap270);
+	DeleteObject(croppedBitmap270);
+	DeleteObject(rotatedBitmap90);
+	DeleteObject(croppedBitmap90);
 }
 
