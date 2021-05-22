@@ -40,4 +40,5 @@ https://docs.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-cropping-and-sca
 The time spent:
 6 hours proof of concept
 +9 hour to make it suitable for personal needs
++5 hour occasional bugfixes
 
