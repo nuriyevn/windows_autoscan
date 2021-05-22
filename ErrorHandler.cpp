@@ -863,12 +863,13 @@ void CWiaTransferCallback::RotateAndCropJpeg(BSTR m_bstrDirectoryName, TCHAR* m_
 	stat = croppedBitmap270->Save(croppedFile270, &jpegEncoderClsId, NULL);
 	lastError = GetLastError();
 	if (lastError != 0)	std::cout << "GetLastError after croppedBitmap270->Save  = " << lastError << std::endl;
-	
-	DeleteObject(image90);
-	DeleteObject(image270);
-	DeleteObject(rotatedBitmap270);
-	DeleteObject(croppedBitmap270);
-	DeleteObject(rotatedBitmap90);
-	DeleteObject(croppedBitmap90);
+
+	image90->~Image();
+	image270->~Image();
+	rotatedBitmap270->~Bitmap();
+	croppedBitmap270->~Bitmap();
+	rotatedBitmap90->~Bitmap();
+	croppedBitmap90->~Bitmap();
+	GdiplusShutdown(gdiplusToken);
 }
 
